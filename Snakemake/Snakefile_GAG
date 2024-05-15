@@ -1,0 +1,119 @@
+# snakemake --profile snakemake_slurm_profile/ --configfile droso_HTT.yaml -s Snakefile_GAG --use-conda --latency-wait 10
+TEs_LIB = config.get("TE_library")
+TEs_GAG_nt = config.get("TE_GAG_nt",None)
+
+rule all:
+	input:
+		expand("{s}.fna.annot", s=config.get("samples",None)),
+		expand("{s}_all_droso_gag.fasta", s=config.get("samples",None))
+
+rule dummy:
+	params:
+		genome = lambda wc: config["samples"][wc.s],
+		GAG_nt = TEs_GAG_nt
+	output:
+		temp("{s}.fna"), temp("{s}_TEs_GAG.fna")
+	shell:
+		"""
+		cp {params.genome} {output[0]}
+		cp {params.GAG_nt} {output[1]}
+		"""
+
+rule repeatmask:
+	"""
+	Find repeats on genome with repeat proteins
+	"""
+	input:
+		genome = rules.dummy.output[0],
+		TE_lib = TEs_LIB
+	output:
+		"{s}.fna.annot", temp("{s}.fna.masked"), temp("{s}.fna.rmsimple.cat.gz")
+	conda:
+		"envs/RepeatMasker_only.yaml"
+	resources:
+		mem=16000,
+		time=1440,
+		cpus=2
+	shell:
+		"""
+		RepeatProteinMask -noLowSimple -engine ncbi -libdir {input.TE_lib} {input.genome}
+		"""
+
+rule extract_seq_GAG:
+	"""
+	Make bed and Extract corresponding sequences to RepeatProteinMask output
+	"""
+	input:
+		annot = "{s}.fna.annot",
+		fa = "{s}.fna"
+	output:
+		temp("{s}_GAG.fasta"), temp("{s}.fna.fai")
+	shell:
+		"""
+		module load bedtools2
+		awk '{{OFS="\t"; print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11}}' {input.annot} \
+		| grep "GAG" | awk '{{OFS="\t"; print $4,$5-1,$6,$8":"$4":"$5-1":"$6,1,$7}}' | \
+		bedtools getfasta -fi {input.fa} -bed - -fo {output[0]} -s -name
+		"""
+
+rule cluster_seq_GAG:
+	"""
+	Cluster sequences
+	"""
+	input:
+		gag_seq = "{s}_GAG.fasta"
+	output:
+		cdhit_fa = temp("{s}_GAG_cd-hit"),
+		list = temp("{s}_GAG_cd-hit.clstr")
+	shell:
+		"""
+		module load gcc
+		/cache/home/js3054/software/cdhit/cd-hit-est -i {input.gag_seq} -d 0 -o {output.cdhit_fa} \
+		-r 0 -c 0.9 -n 8 -g 1 -T 4 -M 32000
+		"""
+		
+rule extract_seqID:
+	"""
+	Extract sequence ID in each cluster
+	"""
+	input:
+		"{s}_GAG_cd-hit.clstr"
+	output:
+		temp(directory("cluster_{s}_GAG"))
+	shell:
+		"""
+		mkdir {output}
+		awk '/^>/ {{OUT=substr($0,2) "_GAG.txt"}}; \
+		{{if ($1 !~ "^>") print substr($3,2,length($3)-4) >> "{output}/"OUT; close(OUT)}}' \
+		{input}
+		"""
+
+rule consensus_filter_seq:
+	"""
+	Extract cluster_seq, align and pile cluster_seq
+	"""	
+	input:
+		gag_seq = "{s}_GAG.fasta",
+		clstr_dir = "cluster_{s}_GAG",
+		GAG_fa = "{s}_TEs_GAG.fna"
+	output:
+		"{s}_all_droso_gag.fasta"
+	shell:
+		"""
+		module load gcc
+		module load seqtk
+		export cluster_id=$(ls {input.clstr_dir}/*_GAG.txt | wc -l)
+		for (( i = 0; i < ${{cluster_id}}; i++ ))
+		do
+		seqtk subseq {input.gag_seq} {input.clstr_dir}/Cluster\ $[i]_GAG.txt > \
+		{input.clstr_dir}/GAG_cluster_$[i].fasta
+		/cache/home/js3054/software/muscle3.8.31_i86linux32 -in \
+		{input.clstr_dir}/GAG_cluster_$[i].fasta -out \
+		{input.clstr_dir}/GAG_cluster_$[i].aligned -maxiters 1 -diags
+		/cache/home/js3054/software/piler/piler2 -cons \
+		{input.clstr_dir}/GAG_cluster_$[i].aligned -out \
+		{input.clstr_dir}/GAG_cluster_$[i]_con.fasta -label {wildcards.s}_GAG_cluster_$[i]
+		done
+		cat {input.clstr_dir}/GAG_cluster_*_con.fasta | seqtk seq -L 600 - | \
+		cat - {input.GAG_fa} > {output}
+		"""
