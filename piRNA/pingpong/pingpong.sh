@@ -1,0 +1,45 @@
+#AURARIA
+samtools index D.auraria_TE_piwi.mapped.bam
+samtools view -q 1 -f 16 -b D.auraria_TE_piwi.mapped.bam D.auraria_TE1_GAG > Daur_TE_antisense.bam
+samtools fastq Daur_TE_antisense.bam > Daur_TE_antisense.fastq
+
+samtools view -q 1 -f 0 -b D.auraria_TE_piwi.mapped.bam D.auraria_piwi-R1-1-A1 > Daur_piwi_sense.bam
+samtools fastq Daur_piwi_sense.bam > Daur_piwi_sense.fastq
+
+bowtie --sam --no-unal -v 3 -x D.auraria_piwi_ref.fasta Daur_piwi_sense.fastq,Daur_TE_antisense.fastq > Daur.sam
+
+#TRIAURARIA
+samtools index D.triauraria_TE_piwi.mapped.bam
+samtools view -q 1 -f 16 -b D.triauraria_TE_piwi.mapped.bam D.triauraria_TE1_GAG0 > Dtri_TE_antisense.bam
+samtools fastq Dtri_TE_antisense.bam > Dtri_TE_antisense.fastq
+
+samtools view -q 1 -f 0 -b D.triauraria_TE_piwi.mapped.bam D.triauraria_piwi > Dtri_piwi_sense.bam
+samtools fastq Dtri_piwi_sense.bam > Dtri_piwi_sense.fastq
+
+bowtie --sam --no-unal -v 3 -x D.triauraria_piwi_ref.fasta Dtri_piwi_sense.fastq,Dtri_TE_antisense.fastq > Dtri.sam
+
+#GABONICUS
+samtools index Z.gabonicus_TE_aub.mapped.bam
+samtools view -q 1 -f 16 -b Z.gabonicus_TE_aub.mapped.bam Z.gabonicus_TE1_GAG_POL > Zgab_TE_antisense.bam
+samtools fastq Zgab_TE_antisense.bam > Zgab_TE_antisense.fastq
+
+samtools view -q 1 -f 0 -b Z.gabonicus_TE_aub.mapped.bam Z.gabonicus_aub > Zgab_aub_sense.bam
+samtools fastq Zgab_aub_sense.bam > Zgab_aub_sense.fastq
+
+bowtie --sam --no-unal -v 3 -x Z.gabonicus_aub_ref.fasta Zgab_aub_sense.fastq,Zgab_TE_antisense.fastq > Zgab.sam
+
+#INDIANUS
+samtools index Z.indianus_TE_aub.mapped.bam
+samtools view -q 1 -f 16 -b Z.indianus_TE_aub.mapped.bam Z.indianus_4605_TE1.1a_GAG11_POL24 > Zind_TE_antisense.bam
+samtools fastq Zind_TE_antisense.bam > Zind_TE_antisense.fastq
+
+samtools view -q 1 -f 0 -b Z.indianus_TE_aub.mapped.bam Z.indianus_4605_aub > Zind_aub_sense.bam
+samtools fastq Zind_aub_sense.bam > Zind_aub_sense.fastq
+
+bowtie --sam --no-unal -v 3 -x Z.indianus_aub_ref.fasta Zind_aub_sense.fastq,Zind_TE_antisense.fastq > Zind.sam
+
+#pingpongpro
+./pingpongpro-v1.0/bin/linux/x86_64/pingpongpro -p -l 23 -L 30 -i Daur.sam -o Daur_pingpong
+./pingpongpro-v1.0/bin/linux/x86_64/pingpongpro -p -l 23 -L 30 -i Dtri.sam -o Dtri_pingpong
+./pingpongpro-v1.0/bin/linux/x86_64/pingpongpro -p -l 23 -L 30 -i Zgab.sam -o Zgab_pingpong
+./pingpongpro-v1.0/bin/linux/x86_64/pingpongpro -p -l 23 -L 30 -i Zind.sam -o Zind_pingpong
